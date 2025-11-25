@@ -11,6 +11,7 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -53,7 +54,7 @@ const Register = () => {
       setError("Apenas e-mails dos domínios @poli.br, @ecomp.poli.br ou @upe.br são permitidos.");
       return;
     }
-
+    
     try {
       const response = await fetch(`${import.meta.env.VITE_url_backend}/register`, {
         method: 'POST',
@@ -69,8 +70,7 @@ const Register = () => {
       });
 
       if (response.ok) {
-        alert('Registro realizado com sucesso!');
-        navigate('/logintest');
+        setRegistrationSuccess(true);
       } else {
         const data = await response.json();
         setError(data.message || "O endereço de e-mail já existe.");
@@ -80,6 +80,38 @@ const Register = () => {
       setError('Erro de rede. Verifique sua conexão.');
     }
   };
+
+  if (registrationSuccess) {
+    return (
+      <div
+        className="flex items-center justify-center min-h-screen"
+        style={{
+          backgroundImage: `url(${backgroundImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      >
+        <div
+          className="p-10 rounded-lg shadow-lg w-full max-w-md text-center"
+          style={{
+            backgroundColor: 'rgba(187, 170, 170, 0.205)',
+            backdropFilter: 'blur(15px)',
+          }}
+        >
+          <h2 className="text-3xl font-bold mb-6 text-white">Verifique seu E-mail</h2>
+          <p className="text-white mb-6">
+            Cadastro realizado com sucesso! Um link de verificação foi enviado para o seu e-mail. Por favor, clique no link para ativar sua conta.
+          </p>
+          <button
+            onClick={() => navigate('/logintest')}
+            className="w-full py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition duration-300"
+          >
+            Ir para o Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -1,5 +1,5 @@
 import { Table } from "react-bootstrap";
-import HeaderUser from "../../components/HeaderUser";
+import HeaderAdmin from "../../components/HeaderAdmin";
 import { SetStateAction, useEffect, useState } from "react";
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
 import ModalDeleteArticle from "../../components/ModalDeleteArticle";
@@ -10,44 +10,27 @@ import { Navigate } from "react-router-dom";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-export interface ArticleInt {
-  //key: string;
-  titulo?: string;
-  descricao?: string;
-  equipe?: string;
-  tema?: string;
-  data?: string;
-  palavras_chave?: string;
-  id?: string,
-  arquivo?: string,
-  resumo?: string,
-  git_link?: string,
-  article_link?: string,
-}
+
 
 const columns = [
   { key: "titulo", label: "Titulo" },
+  { key: "editar", label: "Editar" },
+  { key: "excluir", label: "Excluir" },
   { key: "revisar", label: "Status" },
-  /*{ key: "editar", label: "Editar" },
-  { key: "excluir", label: "Excluir" },*/
+  { key: "botao", label: "" },
+  { key: "botao2", label: "" },
 ];
 
+function ArticlesAdmin () {
 
-function Userarticles () {
   const [Input, setInput] = useState<string>("");
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setInput(event.target.value);
   };
 
-  const userIsAdmin = localStorage.getItem('isAdmin') === 'true'; // Verificando se o usuário é admin no localStorage
-  
-  if (userIsAdmin) {
-    // Se não for admin, redireciona para a página de usuário
-    return <Navigate to="/admin-articles" />;
-  }
-
-  const [Article, setArticle] = useState<ArticleInt[]>([]);
+  const [Article, setArticle] = useState([]);
   const [open, setOpen] = useState(false)
+  const [formValid, setFormValid] = useState(false)
   const [NewArticle, setNewArticle] = useState({
     titulo: '',
     descricao: '',
@@ -59,18 +42,87 @@ function Userarticles () {
     arquivo: '#',
     revisado: "",
     resumo: '',
-    git_link: '',
-    article_link: '',
   })
 
-  const [changedTitle, setChangedTitle] = useState(true)
+  const userIsAdmin = localStorage.getItem('isAdmin') === 'true'; // Verificando se o usuário é admin no localStorage
+  
+  if (!userIsAdmin) {
+    // Se não for admin, redireciona para a página de usuário
+    return <Navigate to="/user-articles" />;
+  }
 
   const [file, setFile] = useState<File | undefined>();
+  
+  const validateFormWithData = (articleData: typeof NewArticle, selectedFile: typeof file) => {
+    const requiredFields = [
+      'titulo',
+      'tema',
+      'palavras_chave', 
+      'descricao',
+      'equipe',
+      'data',
+      'resumo',
+    ];
+
+    const isAllRequiredFieldsFilled = requiredFields.every(field => {
+        const value = articleData[field];
+        
+        if (typeof value === 'string') {
+            return value.trim() !== '';
+        }
+        return false;
+    });
+
+    const isFileSelected = !!selectedFile;
+
+    return isAllRequiredFieldsFilled && isFileSelected;
+  };
+  
+  const handleChangeArticle = (field: keyof typeof NewArticle, value: any) => {
+    const updatedArticle = { ...NewArticle, [field]: value };
+    setNewArticle(updatedArticle);
+    
+    setFormValid(validateFormWithData(updatedArticle, file));
+  };
+
   async function uploadPdf(e: React.FormEvent<HTMLInputElement>) {
     const target = e.target as HTMLInputElement & {
       files: FileList;
     };
-    setFile(target.files[0]);
+    const selectedFile = target.files[0];
+    setFile(selectedFile);
+
+    setFormValid(validateFormWithData(NewArticle, selectedFile));
+  }
+
+  const [changedTitle, setChangedTitle] = useState(true);
+
+  const handleApprove = (artigo) => {
+    const token = localStorage.getItem('authToken');
+    axios.put(`${import.meta.env.VITE_url_backend}/artigo_revisado/${artigo.id}/?novo_revisado=Aprovado&id_token=${token}`, null,{
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    })
+      .then(response => {        window.location.reload();
+      })
+        .catch(error => console.error('Erro ao aprovar projeto:', error));
+  }
+
+  const handleReprove = (artigo) => {
+    const token = localStorage.getItem('authToken');
+    axios.put(`${import.meta.env.VITE_url_backend}/artigo_revisado/${artigo.id}/?novo_revisado=Reprovado&id_token=${token}`, null,{
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    })
+      .then(response => {
+
+        window.location.reload();
+      })
+        .catch(error => console.error('Erro ao reprovar projeto:', error));
   }
 
   const handlePdfUpload = (id: string) => {
@@ -94,6 +146,11 @@ function Userarticles () {
     if (!token) {
       alert('Token de autenticação não encontrado.');
       return;
+    }
+
+    if (!validateFormWithData(NewArticle, file)) {
+        toast.error("Por favor, preencha todos os campos obrigatórios e anexe o PDF.");
+        return;
     }
   
     // Separando os campos de tecnologias, equipe e palavras-chave por vírgulas e transformando-os em arrays
@@ -120,8 +177,7 @@ function Userarticles () {
       resumo: NewArticle.resumo || "Resumo ausente",
     };
   
-    console.log('Dados do novo projeto (com valores padrão, se necessário):', NewArticleWithDefaults);
-  
+
     axios.post(`${import.meta.env.VITE_url_backend}/artigos_add?id_token=${token}`, NewArticleWithDefaults, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -134,8 +190,7 @@ function Userarticles () {
     })
     .catch(error => {
       setChangedTitle(false)
-      toast.error('Erro ao adicionar artigo:', error.response.data.detail || '')
-    });
+      toast.error(`Erro ao adicionar artigo: ${error.response.data.detail}`)});
   };
 
   const handleUpdate = () => {
@@ -146,6 +201,27 @@ function Userarticles () {
     });
   }; 
   
+  useEffect(() => {
+    if (open) {
+      setFormValid(validateFormWithData(NewArticle, file));
+    } else {
+      setNewArticle({
+        titulo: '',
+        descricao: '',
+        equipe: [],
+        tema: '',
+        data: '',
+        palavras_chave: [],
+        id: '',
+        arquivo: '#',
+        revisado: "",
+        resumo: '',
+      });
+      setFile(undefined);
+      setFormValid(false);
+    }
+  }, [open]);
+
   useEffect(() => {
     axios.get(`${import.meta.env.VITE_url_backend}/artigos/`).then(function (response) {
       setArticle(response.data)
@@ -182,7 +258,7 @@ function Userarticles () {
 
   return (
     <>
-      <HeaderUser />
+      <HeaderAdmin />
       <ToastContainer
         position="top-center"
         autoClose={3000}
@@ -238,20 +314,66 @@ function Userarticles () {
                     }`}
                   >
                     {column.key === "editar" ? (
-                      <ModalUpdateArticle
-                        article={article}
-                        handleUpdate={handleUpdate}
-                      />
+                      <ModalUpdateArticle article={article} />
+
                     ) : column.key === "excluir" ? (
                       <ModalDeleteArticle
                         title={article.titulo}
                         id={article.id}
                         handleUpdate={handleUpdate}
                       />
+
+                    ) : column.key === "comentar" ? (
+                      <ModalComment projectId={article.id} />
+
                     ) : column.key === "revisar" ? (
                       article.revisado
+
+                    ) : column.key === "botao" &&
+                      (article.revisado === "Pendente") ? (
+                      <button
+                        type="button"
+                        className="px-3 py-2 bg-primary-color text-white rounded-xl hover:bg-blue-700 transition duration-300"
+                        onClick={() => handleApprove(article)}
+                      >
+                        Aprovar
+                      </button>
+                    
+                    ) : column.key === "botao2" &&
+                      (article.revisado === "Pendente") ? (
+                      <button
+                        type="button"
+                        className="px-3 py-2 bg-red-800 text-white rounded-xl hover:bg-red-700 transition duration-300"
+                        onClick={() => handleReprove(article)}
+                      >
+                        Reprovar
+                      </button>
+                    ) : column.key === "botao" &&
+                      (article.revisado === "Reprovado") ? (
+                        <button
+                          type="button"
+                          className="px-3 py-2 bg-primary-color text-white rounded-xl hover:bg-blue-700 transition duration-300"
+                          onClick={() => handleApprove(article)}
+                        >
+                          Aprovar
+                        </button>
+                    ) : column.key === "botao2" &&
+                      (article.revisado === "Aprovado") ? (
+                        <button
+                          type="button"
+                          className="px-3 py-2 bg-red-800 text-white rounded-xl hover:bg-red-700 transition duration-300"
+                          onClick={() => handleReprove(article)}
+                        >
+                          Reprovar
+                        </button>
+                    ) : column.key === "botao2" &&
+                        (article.revisado === "Reprovado" ) ? (
+                        <div> </div>
+                    ) : column.key === "botao" &&
+                        (article.revisado === "Aprovado" ) ? (
+                        <div> </div>
                     ) : (
-                      article.titulo
+                        article.titulo
                     )}
                   </td>
                 ))}
@@ -283,7 +405,7 @@ function Userarticles () {
               <form action="POST">
                 <div className="grid grid-cols-2 justify-items-center pt-3 gap-y-[2vh]">
                   <div>
-                    <h3 className="text-lg font-semibold">Título</h3>
+                    <h3 className="text-lg font-semibold">Título <span className="text-red-500">*</span></h3>
                     <input
                       type="text"
                       name="titulo"
@@ -292,92 +414,65 @@ function Userarticles () {
                       className="focus:outline-none border-b-2 w-[15vw]"
                       onChange={(e) => {
                         setChangedTitle(true)
-                        setNewArticle({ ...NewArticle, titulo: e.target.value })
-                      }}
+                        handleChangeArticle('titulo', e.target.value)}}
                     />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">Área de pesquisa</h3>
+                    <h3 className="text-lg font-semibold">Área de pesquisa <span className="text-red-500">*</span></h3>
                     <input
                       type="text"
                       name="tema"
                       id="tema"
                       placeholder="Ex: Inteligência Artificial"
                       className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => setNewArticle({ ...NewArticle, tema: e.target.value })}
+                      onChange={(e) => handleChangeArticle('tema', e.target.value)}
                     />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">Palavras-chave</h3>
+                    <h3 className="text-lg font-semibold">Palavras-chave <span className="text-red-500">*</span></h3>
                     <input
                       type="text"
                       name="palavras"
                       id="palavras"
                       placeholder="Ex: Palavra1,Palavra2"
                       className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => setNewArticle({ ...NewArticle, palavras_chave: e.target.value })}
+                      onChange={(e) => handleChangeArticle('palavras_chave', e.target.value)}
                     />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">Descrição</h3>
+                    <h3 className="text-lg font-semibold">Descrição <span className="text-red-500">*</span></h3>
                     <input
                       type="text"
                       name="descricao"
                       id="descricao"
                       placeholder="Descrição"
                       className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => setNewArticle({ ...NewArticle, descricao: e.target.value })}
+                      onChange={(e) => handleChangeArticle('descricao', e.target.value)}
                     />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">Resumo</h3>
+                    <h3 className="text-lg font-semibold">Resumo <span className="text-red-500">*</span></h3>
                     <input
-                      type="text"
-                      name="resumo"
-                      id="resumo"
-                      placeholder="Resumo"
-                      className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => setNewArticle({ ...NewArticle, resumo: e.target.value })}
+                        type="text"
+                        name="resumo"
+                        id="resumo"
+                        placeholder="Resumo"
+                        className="focus:outline-none border-b-2 w-[15vw]"
+                        onChange={(e) => handleChangeArticle('resumo', e.target.value)}
                     />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">Semestre</h3>
+                    <h3 className="text-lg font-semibold">Semestre <span className="text-red-500">*</span></h3>
                     <select
                       name="semestre"
                       id="semestre"
                       value={NewArticle.data}
                       className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => setNewArticle({ ...NewArticle, data: e.target.value })}>
+                      onChange={(e) => handleChangeArticle('data', e.target.value)}>
                       <option value="">Selecione um semestre</option>
                       {semesterGenerator().map((semestre) => (
                           <option key={semestre} value={semestre}>{semestre}</option>))}
                     </select>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold">Link Artigo Externo</h3>
-                    <input
-                      type="text"
-                      name="article_link"
-                      id="article_link"
-                      placeholder="www.exemplo.com"
-                      className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => {
-                        setNewArticle({ ...NewArticle, article_link: e.target.value })
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold">Link GitHub</h3>
-                    <input
-                      type="text"
-                      name="git_link"
-                      id="git_link"
-                      placeholder="www.github.com/exemplo"
-                      className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => {
-                        setNewArticle({ ...NewArticle, git_link: e.target.value })
-                      }}
-                    />
                   </div>
                   <div className="w-[15vw] relative">
                     <input
@@ -397,19 +492,19 @@ function Userarticles () {
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {file ? <span>{file.name}</span> : <span>Subir PDF</span>}
+                      {file ? <span>{file.name}</span> : <span>Subir PDF <span className="text-red-500">*</span></span>}
                       <FaFileUpload className="ml-2" />
                     </label>
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">Equipe</h3>
+                    <h3 className="text-lg font-semibold">Equipe <span className="text-red-500">*</span></h3>
                     <input
                       type="text"
                       name="equipe"
                       id="equipe"
                       placeholder="Pessoa1,Pessoa2,Pessoa3"
                       className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => setNewArticle({ ...NewArticle, equipe: e.target.value })}
+                      onChange={(e) => handleChangeArticle('equipe', e.target.value)}
                     />
                   </div>
                 </div>
@@ -418,12 +513,12 @@ function Userarticles () {
                 <button
                   type="button"
                   className={`inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm sm:ml-3 sm:w-auto ${
-                  changedTitle
+                  formValid && changedTitle
                     ? "bg-primary-color hover:bg-blue-700" 
                     : "bg-gray-400 cursor-not-allowed"
                   }`}
-                  onClick={() => handlePost(setOpen)}
-                  disabled={!changedTitle}
+                  onClick={handlePost}
+                  disabled={!formValid || !changedTitle}
                 >
                   Enviar
                 </button>
@@ -445,4 +540,4 @@ function Userarticles () {
   )
 }
 
-export default Userarticles
+export default ArticlesAdmin

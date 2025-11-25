@@ -21,8 +21,6 @@ export interface ArticleInt {
   id?: string,
   arquivo?: string,
   resumo?: string,
-  git_link?: string,
-  article_link?: string,
 }
 
 const columns = [
@@ -48,6 +46,7 @@ function Userarticles () {
 
   const [Article, setArticle] = useState<ArticleInt[]>([]);
   const [open, setOpen] = useState(false)
+  const [formValid, setFormValid] = useState(false)
   const [NewArticle, setNewArticle] = useState({
     titulo: '',
     descricao: '',
@@ -59,18 +58,54 @@ function Userarticles () {
     arquivo: '#',
     revisado: "",
     resumo: '',
-    git_link: '',
-    article_link: '',
   })
 
   const [changedTitle, setChangedTitle] = useState(true)
 
   const [file, setFile] = useState<File | undefined>();
+  
+  const validateFormWithData = (articleData: typeof NewArticle, selectedFile: typeof file) => {
+    const requiredFields = [
+      'titulo',
+      'tema',
+      'palavras_chave', 
+      'descricao',
+      'equipe',
+      'data', // data is semester
+      'resumo',
+    ];
+
+    const isAllRequiredFieldsFilled = requiredFields.every(field => {
+        const value = articleData[field];
+        
+        // Check if value is a non-empty string
+        if (typeof value === 'string') {
+            return value.trim() !== '';
+        }
+        return false;
+    });
+
+    const isFileSelected = !!selectedFile;
+
+    return isAllRequiredFieldsFilled && isFileSelected;
+  };
+  
+  const handleChangeArticle = (field: keyof typeof NewArticle, value: any) => {
+    const updatedArticle = { ...NewArticle, [field]: value };
+    setNewArticle(updatedArticle);
+    
+    setFormValid(validateFormWithData(updatedArticle, file));
+  };
+
   async function uploadPdf(e: React.FormEvent<HTMLInputElement>) {
     const target = e.target as HTMLInputElement & {
       files: FileList;
     };
-    setFile(target.files[0]);
+    const selectedFile = target.files[0]; // Capture the file
+    setFile(selectedFile); // Set the file state
+    
+    // Trigger validation update immediately
+    setFormValid(validateFormWithData(NewArticle, selectedFile));
   }
 
   const handlePdfUpload = (id: string) => {
@@ -94,6 +129,11 @@ function Userarticles () {
     if (!token) {
       alert('Token de autenticação não encontrado.');
       return;
+    }
+
+    if (!validateFormWithData(NewArticle, file)) {
+        toast.error("Por favor, preencha todos os campos obrigatórios e anexe o PDF.");
+        return;
     }
   
     // Separando os campos de tecnologias, equipe e palavras-chave por vírgulas e transformando-os em arrays
@@ -147,11 +187,30 @@ function Userarticles () {
   }; 
   
   useEffect(() => {
+    // <--- UPDATED useEffect for reset and validation
+    if (open) {
+      setFormValid(validateFormWithData(NewArticle, file));
+    } else {
+      setNewArticle({
+        titulo: '',
+        descricao: '',
+        equipe: [],
+        tema: '',
+        data: '',
+        palavras_chave: [],
+        id: '',
+        arquivo: '#',
+        revisado: "",
+        resumo: '',
+      });
+      setFile(undefined); 
+      setFormValid(false);
+    }
+  }, [open]);
+
+  useEffect(() => {
     axios.get(`${import.meta.env.VITE_url_backend}/artigos/`).then(function (response) {
       setArticle(response.data)
-
-
-
     })
   }, []);
 
@@ -283,7 +342,7 @@ function Userarticles () {
               <form action="POST">
                 <div className="grid grid-cols-2 justify-items-center pt-3 gap-y-[2vh]">
                   <div>
-                    <h3 className="text-lg font-semibold">Título</h3>
+                    <h3 className="text-lg font-semibold">Título <span className="text-red-500">*</span></h3>
                     <input
                       type="text"
                       name="titulo"
@@ -292,92 +351,66 @@ function Userarticles () {
                       className="focus:outline-none border-b-2 w-[15vw]"
                       onChange={(e) => {
                         setChangedTitle(true)
-                        setNewArticle({ ...NewArticle, titulo: e.target.value })
+                        handleChangeArticle('titulo', e.target.value)
                       }}
                     />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">Área de pesquisa</h3>
+                    <h3 className="text-lg font-semibold">Área de pesquisa <span className="text-red-500">*</span></h3>
                     <input
                       type="text"
                       name="tema"
                       id="tema"
                       placeholder="Ex: Inteligência Artificial"
                       className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => setNewArticle({ ...NewArticle, tema: e.target.value })}
+                      onChange={(e) => handleChangeArticle('tema', e.target.value)}
                     />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">Palavras-chave</h3>
+                    <h3 className="text-lg font-semibold">Palavras-chave <span className="text-red-500">*</span></h3>
                     <input
                       type="text"
                       name="palavras"
                       id="palavras"
                       placeholder="Ex: Palavra1,Palavra2"
                       className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => setNewArticle({ ...NewArticle, palavras_chave: e.target.value })}
+                      onChange={(e) => handleChangeArticle('palavras_chave', e.target.value)}
                     />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">Descrição</h3>
+                    <h3 className="text-lg font-semibold">Descrição <span className="text-red-500">*</span></h3>
                     <input
                       type="text"
                       name="descricao"
                       id="descricao"
                       placeholder="Descrição"
                       className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => setNewArticle({ ...NewArticle, descricao: e.target.value })}
+                      onChange={(e) => handleChangeArticle('descricao', e.target.value)}
                     />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">Resumo</h3>
+                    <h3 className="text-lg font-semibold">Resumo <span className="text-red-500">*</span></h3>
                     <input
                       type="text"
                       name="resumo"
                       id="resumo"
                       placeholder="Resumo"
                       className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => setNewArticle({ ...NewArticle, resumo: e.target.value })}
+                      onChange={(e) => handleChangeArticle('resumo', e.target.value)}
                     />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">Semestre</h3>
+                    <h3 className="text-lg font-semibold">Semestre <span className="text-red-500">*</span></h3>
                     <select
                       name="semestre"
                       id="semestre"
                       value={NewArticle.data}
                       className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => setNewArticle({ ...NewArticle, data: e.target.value })}>
+                      onChange={(e) => handleChangeArticle('data', e.target.value)}>
                       <option value="">Selecione um semestre</option>
                       {semesterGenerator().map((semestre) => (
                           <option key={semestre} value={semestre}>{semestre}</option>))}
                     </select>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold">Link Artigo Externo</h3>
-                    <input
-                      type="text"
-                      name="article_link"
-                      id="article_link"
-                      placeholder="www.exemplo.com"
-                      className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => {
-                        setNewArticle({ ...NewArticle, article_link: e.target.value })
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold">Link GitHub</h3>
-                    <input
-                      type="text"
-                      name="git_link"
-                      id="git_link"
-                      placeholder="www.github.com/exemplo"
-                      className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => {
-                        setNewArticle({ ...NewArticle, git_link: e.target.value })
-                      }}
-                    />
                   </div>
                   <div className="w-[15vw] relative">
                     <input
@@ -397,19 +430,19 @@ function Userarticles () {
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {file ? <span>{file.name}</span> : <span>Subir PDF</span>}
+                      {file ? <span>{file.name}</span> : <span>Subir PDF <span className="text-red-500">*</span></span>}
                       <FaFileUpload className="ml-2" />
                     </label>
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">Equipe</h3>
+                    <h3 className="text-lg font-semibold">Equipe <span className="text-red-500">*</span></h3>
                     <input
                       type="text"
                       name="equipe"
                       id="equipe"
                       placeholder="Pessoa1,Pessoa2,Pessoa3"
                       className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => setNewArticle({ ...NewArticle, equipe: e.target.value })}
+                      onChange={(e) => handleChangeArticle('equipe', e.target.value)}
                     />
                   </div>
                 </div>
@@ -418,12 +451,12 @@ function Userarticles () {
                 <button
                   type="button"
                   className={`inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm sm:ml-3 sm:w-auto ${
-                  changedTitle
+                  formValid && changedTitle
                     ? "bg-primary-color hover:bg-blue-700" 
                     : "bg-gray-400 cursor-not-allowed"
                   }`}
-                  onClick={() => handlePost(setOpen)}
-                  disabled={!changedTitle}
+                  onClick={handlePost}
+                  disabled={!formValid || !changedTitle}
                 >
                   Enviar
                 </button>
