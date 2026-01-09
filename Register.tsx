@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import backgroundImage from '../assets/backgroundlogin.jpg';
 import PasswordStrengthMeter from '../components/PasswordStrengthMeter';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
-import axios from "axios";
 
 const Register = () => {
   const [username, setUsername] = useState('');
@@ -12,6 +11,7 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -54,26 +54,64 @@ const Register = () => {
       setError("Apenas e-mails dos domínios @poli.br, @ecomp.poli.br ou @upe.br são permitidos.");
       return;
     }
-
+    
     try {
-      const response = await axios.post('/register/', {
+      const response = await fetch(`/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           username,
           email,
           password,
           is_admin: false,
+        }),
       });
 
-      // Se chegou aqui, deu certo (2xx)
-      alert('Registro realizado com sucesso!');
-      navigate('/login');
-
-    } catch (error: any) {
+      if (response.ok) {
+        setRegistrationSuccess(true);
+      } else {
+        const data = await response.json();
+        setError(data.message || "O endereço de e-mail já existe.");
+      }
+    } catch (error) {
       console.error('Erro de rede:', error);
-      // Captura mensagem do backend se houver
-      const msg = error.response?.data?.message || "O endereço de e-mail já existe ou erro no servidor.";
-      setError(msg);
+      setError('Erro de rede. Verifique sua conexão.');
     }
   };
+
+  if (registrationSuccess) {
+    return (
+      <div
+        className="flex items-center justify-center min-h-screen"
+        style={{
+          backgroundImage: `url(${backgroundImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      >
+        <div
+          className="p-10 rounded-lg shadow-lg w-full max-w-md text-center"
+          style={{
+            backgroundColor: 'rgba(187, 170, 170, 0.205)',
+            backdropFilter: 'blur(15px)',
+          }}
+        >
+          <h2 className="text-3xl font-bold mb-6 text-white">Verifique seu E-mail</h2>
+          <p className="text-white mb-6">
+            Cadastro realizado com sucesso! Um link de verificação foi enviado para o seu e-mail. Por favor, clique no link para ativar sua conta.
+          </p>
+          <button
+            onClick={() => navigate('/login')}
+            className="w-full py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition duration-300"
+          >
+            Ir para o Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

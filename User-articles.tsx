@@ -2,109 +2,113 @@ import { Table } from "react-bootstrap";
 import HeaderUser from "../../components/HeaderUser";
 import { SetStateAction, useEffect, useState } from "react";
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
-import ModalDeleteProduto from "../../components/ModalDeleteProduto";
-import ModalUpdateProduto from "../../components/ModalUpdateProduto";
+import ModalDeleteArticle from "../../components/ModalDeleteArticle";
+import ModalUpdateArticle from "../../components/ModalUpdateArticle";
 import { FaFileUpload } from "react-icons/fa";
 import axios from "axios";
 import { Navigate } from "react-router-dom";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-
-export interface ProdutoInt {
+export interface ArticleInt {
   //key: string;
   titulo?: string;
   descricao?: string;
   equipe?: string;
-  tipo?: string;
-  semestre?: string;
+  tema?: string;
+  data?: string;
+  palavras_chave?: string;
   id?: string,
   arquivo?: string,
-  produto?: string,
+  resumo?: string,
 }
 
 const columns = [
   { key: "titulo", label: "Titulo" },
-  { key: "status", label: "Status" },
-
+  { key: "revisar", label: "Status" },
+  /*{ key: "editar", label: "Editar" },
+  { key: "excluir", label: "Excluir" },*/
 ];
 
 
-function Userprodutos () {
-  const [file, setFile] = useState<File | undefined>();
+function Userarticles () {
   const [Input, setInput] = useState<string>("");
-  const [changedTitle, setChangedTitle] = useState(true);
-  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {setInput(event.target.value);};
-  const [Produto, setProduto ] = useState<ProdutoInt[]>([]);
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setInput(event.target.value);
+  };
+
+  const userIsAdmin = localStorage.getItem('isAdmin') === 'true'; // Verificando se o usuário é admin no localStorage
+  
+  if (userIsAdmin) {
+    // Se não for admin, redireciona para a página de usuário
+    return <Navigate to="/admin-articles" />;
+  }
+
+  const [Article, setArticle] = useState<ArticleInt[]>([]);
   const [open, setOpen] = useState(false)
-  const [formValid, setFormValid] = useState(false);
-  const [NewProduto, setNewProduto] = useState({
+  const [formValid, setFormValid] = useState(false)
+  const [NewArticle, setNewArticle] = useState({
     titulo: '',
     descricao: '',
     equipe: [] as string[],
-    tipo: '',
-    semestre: '',
+    tema: '',
+    data: '',
+    palavras_chave: [] as string[],
     id: '',
     arquivo: '#',
-    status: "",
+    revisado: "",
+    resumo: '',
   })
 
-  const userIsAdmin = localStorage.getItem('isAdmin') === 'true';
-  if (userIsAdmin) {
-    // Se não for admin, redireciona para a página de usuário
-    return <Navigate to="/admin-produtos" />;
-  }
+  const [changedTitle, setChangedTitle] = useState(true)
 
-  const validateFormWithData = (produtoData) => {
+  const [file, setFile] = useState<File | undefined>();
+  
+  const validateFormWithData = (articleData: typeof NewArticle, selectedFile: typeof file) => {
     const requiredFields = [
       'titulo',
-      'tipo',
+      'tema',
+      'palavras_chave', 
       'descricao',
       'equipe',
-      'semestre',
-      'arquivo'
+      'data', // data is semester
+      'resumo',
     ];
 
-    return requiredFields.every(field => {
-      const value = produtoData[field];
-      if (typeof value === 'string') {
-        return value.trim() !== '';
-      } else if (Array.isArray(value)) {
-        return value.length > 0;
-      }
-      return false;
+    const isAllRequiredFieldsFilled = requiredFields.every(field => {
+        const value = articleData[field];
+        
+        // Check if value is a non-empty string
+        if (typeof value === 'string') {
+            return value.trim() !== '';
+        }
+        return false;
     });
-  };
 
-  const validateForm = () => {
-    return validateFormWithData(NewProduto);
-  };
+    const isFileSelected = !!selectedFile;
 
-    // Função para atualizar o NewProject e verificar a validação
-  const handleChangeProduto = (field, value) => {
-    const updatedProduto = {...NewProduto, [field]: value};    // Primeira atualização do estado
-    setNewProduto(updatedProduto);
-    const isValid = validateFormWithData(updatedProduto);    // Validação imediata com o estado atualizado
-    setFormValid(isValid);
+    return isAllRequiredFieldsFilled && isFileSelected;
   };
-
-  const handleUpdate = () => {
-    axios.get(`/produtos/`).then(response => {
-      setProduto(response.data);
-    }).catch(error => {
-      console.error('Erro ao atualizar produto', error.response.data.detail || '');
-    });
+  
+  const handleChangeArticle = (field: keyof typeof NewArticle, value: any) => {
+    const updatedArticle = { ...NewArticle, [field]: value };
+    setNewArticle(updatedArticle);
+    
+    setFormValid(validateFormWithData(updatedArticle, file));
   };
 
   async function uploadPdf(e: React.FormEvent<HTMLInputElement>) {
     const target = e.target as HTMLInputElement & {
       files: FileList;
     };
-    setFile(target.files[0]);
+    const selectedFile = target.files[0]; // Capture the file
+    setFile(selectedFile); // Set the file state
+    
+    // Trigger validation update immediately
+    setFormValid(validateFormWithData(NewArticle, selectedFile));
   }
 
   const handlePdfUpload = (id: string) => {
-    if (!file) return;
     const formData = new FormData();
     formData.append('file', file);
     axios.post(`/upload_pdf_artigo/${id}/`, formData, {
@@ -112,91 +116,112 @@ function Userprodutos () {
           'Content-Type': 'multipart/form-data'
         }
     })
+    .then(response => {
+      window.location.reload();
+      setOpen(false);
+    })
     .catch(error => console.log('Erro ao fazer upload do PDF:', error))
   }
 
   const handlePost = () => {
     const token = localStorage.getItem('authToken');
-
+    
     if (!token) {
       alert('Token de autenticação não encontrado.');
       return;
     }
 
-    // Função auxiliar para converter string em array
-    const stringToArray = (value) => {
-      return typeof value === 'string' && value.trim() 
-        ? value.split(',').map(item => item.trim()) 
-        : [];
-    };
+    if (!validateFormWithData(NewArticle, file)) {
+        toast.error("Por favor, preencha todos os campos obrigatórios e anexe o PDF.");
+        return;
+    }
+  
+    // Separando os campos de tecnologias, equipe e palavras-chave por vírgulas e transformando-os em arrays
+    const equipeArray = typeof NewArticle.equipe === 'string' && NewArticle.equipe.trim()
+      ? NewArticle.equipe.split(',').map(item => item.trim())
+      : [];
 
-    // Conversão usando a função auxiliar
-    const equipeArray = stringToArray(NewProduto.equipe);
+    const palavrasChaveArray = typeof NewArticle.palavras_chave === 'string' && NewArticle.palavras_chave.trim()
+      ? NewArticle.palavras_chave.split(',').map(item => item.trim())
+      : [];
 
+  
     // Atualiza os dados do projeto com os arrays processados
-    const NewProdutoWithDefaults = {
-      id: NewProduto.id || "default-id",
-      titulo: NewProduto.titulo,
-      tipo: NewProduto.tipo,
-      descricao: NewProduto.descricao,
-      equipe: equipeArray,
-      semestre: NewProduto.semestre,
-      arquivo: NewProduto.arquivo || '#',
-      status: NewProduto.status || "Pendente",
+    const NewArticleWithDefaults = {
+      id: NewArticle.id || "default-id",
+      titulo: NewArticle.titulo || "Título não informado",
+      tema: NewArticle.tema || "Tema não informado",
+      palavras_chave: palavrasChaveArray.length > 0 ? palavrasChaveArray : [],
+      descricao: NewArticle.descricao || "Sem descrição",
+      equipe: equipeArray.length > 0 ? equipeArray : [],
+      data: NewArticle.data || "",
+      arquivo: NewArticle.arquivo || '#',
+      revisado: NewArticle.revisado || "Pendente",
+      resumo: NewArticle.resumo || "Resumo ausente",
     };
-
-    axios.post(`/produtos_add/?id_token=${token}`, NewProdutoWithDefaults, {
+  
+    console.log('Dados do novo projeto (com valores padrão, se necessário):', NewArticleWithDefaults);
+  
+    axios.post(`/artigos_add/?id_token=${token}`, NewArticleWithDefaults, {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     })
     .then(response => {
-      toast.success("Produto cadastrado com sucesso!");
-      handlePdfUpload(response.data.produto.id)
-      setOpen(false);
+      handlePdfUpload(response.data.artigo.id);
+      toast.success("Artigo cadastrado com sucesso!");
     })
     .catch(error => {
-    setChangedTitle(false)
-    toast.error(`Erro ao adicionar artigo: ${error.response.data.detail}`)});
+      setChangedTitle(false)
+      toast.error('Erro ao adicionar artigo:', error.response.data.detail || '')
+    });
   };
 
-    useEffect(() => {
-      if (open) {
-        // Quando o modal é aberto, verifica a validade do formulário
-        setFormValid(validateForm());
-      } else {
-        // Quando o modal é fechado, reset do NewProject para o estado inicial
-        setNewProduto({
-          titulo: "",
-          descricao: "",
-          equipe: "",
-          tipo: "",
-          semestre: "",
-          id: "",
-          arquivo: '#',
-          status: "",
-        });
-      }
-    }, [open]);
+  const handleUpdate = () => {
+    axios.get(`/artigos/`).then(response => {
+      setArticle(response.data);
+    }).catch(error => {
+      console.error('Erro ao atualizar artigo', error);
+    });
+  }; 
+  
+  useEffect(() => {
+    // <--- UPDATED useEffect for reset and validation
+    if (open) {
+      setFormValid(validateFormWithData(NewArticle, file));
+    } else {
+      setNewArticle({
+        titulo: '',
+        descricao: '',
+        equipe: [],
+        tema: '',
+        data: '',
+        palavras_chave: [],
+        id: '',
+        arquivo: '#',
+        revisado: "",
+        resumo: '',
+      });
+      setFile(undefined); 
+      setFormValid(false);
+    }
+  }, [open]);
 
   useEffect(() => {
-    axios.get(`/produtos/`).then(function (response) {
-      setProduto(response.data)
-
-
-
+    axios.get(`/artigos/`).then(function (response) {
+      setArticle(response.data)
     })
   }, []);
 
-  const filteredProduto = Array.isArray(Produto.produtos) ? Produto.produtos.filter((produto) => {
+  const filteredArticle = Array.isArray(Article.artigos) ? Article.artigos.filter((article) => {   
     const input = Input.toLowerCase();
     return (
-      produto.titulo?.toLowerCase().includes(input) ||
-      produto.tipo?.toLowerCase().includes(input)
+      article.titulo?.toLowerCase().includes(input) ||
+      article.palavras_chave?.some(p => p.toLowerCase().includes(input)) ||
+      article.tema?.toLowerCase().includes(input)
     );
   }) : [];
-
   const semesterGenerator = (): string[] => {
     const current = new Date();
     const currentYear = current.getFullYear();
@@ -227,16 +252,16 @@ function Userprodutos () {
         draggable
         pauseOnHover
         theme="colored"
-      />
+    />
       <div className="flex flex-col px-[13vw] pt-10 gap-6">
         <section className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-start text-dark-color">Produtos</h1>
+          <h1 className="text-2xl font-bold text-start text-dark-color">Artigos</h1>
           <button
             type="submit"
             onClick={() => setOpen(true)}
             className="rounded-md bg-primary-color h-full w-[15vw] text-white"
           >
-            Novo produto
+            Novo artigo
           </button>
         </section>
         <input
@@ -244,7 +269,7 @@ function Userprodutos () {
           name="searchbar"
           id="searchbar"
           className="rounded-full w-full h-[5vh] border border-light-color indent-2 bg-[#D8DBE2]"
-          placeholder="Pesquise por título, tipo de produto"
+          placeholder="Pesquise por título, área de pesquisa, palavra-chave"
           value={Input}
           onChange={handleInputChange}
         />
@@ -262,8 +287,8 @@ function Userprodutos () {
             ))}
           </thead>
           <tbody>
-            {filteredProduto.map((produto) => (
-              <tr key={produto.id} className="border border-light-color">
+            {filteredArticle.map((article) => (
+              <tr key={article.id} className="border border-light-color">
                 {columns.map((column) => (
                   <td
                     key={column.key}
@@ -272,20 +297,20 @@ function Userprodutos () {
                     }`}
                   >
                     {column.key === "editar" ? (
-                      <ModalUpdateProduto
-                        produto={produto}
+                      <ModalUpdateArticle
+                        article={article}
                         handleUpdate={handleUpdate}
                       />
                     ) : column.key === "excluir" ? (
-                      <ModalDeleteProduto
-                        title={produto.titulo}
-                        id={produto.id}
+                      <ModalDeleteArticle
+                        title={article.titulo}
+                        id={article.id}
                         handleUpdate={handleUpdate}
                       />
-                    ) : column.key === "status" ? (
-                      produto.status
+                    ) : column.key === "revisar" ? (
+                      article.revisado
                     ) : (
-                      produto.titulo
+                      article.titulo
                     )}
                   </td>
                 ))}
@@ -309,7 +334,7 @@ function Userprodutos () {
                 <div className="sm:flex sm:items-start">
                   <div className="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
                     <DialogTitle as="h2" className="text-lg font-semibold leading-6 text-gray-900">
-                      Cadastrar novo produto
+                      Cadastrar novo artigo
                     </DialogTitle>
                   </div>
                 </div>
@@ -326,41 +351,62 @@ function Userprodutos () {
                       className="focus:outline-none border-b-2 w-[15vw]"
                       onChange={(e) => {
                         setChangedTitle(true)
-                        handleChangeProduto('titulo', e.target.value)}}
+                        handleChangeArticle('titulo', e.target.value)
+                      }}
                     />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">Tipo de produto <span className="text-red-500">*</span></h3>
-                    <select
-                      name="tipo"
-                      id="tipo"
+                    <h3 className="text-lg font-semibold">Área de pesquisa <span className="text-red-500">*</span></h3>
+                    <input
+                      type="text"
+                      name="tema"
+                      id="tema"
+                      placeholder="Ex: Inteligência Artificial"
                       className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => handleChangeProduto('tipo', e.target.value)}
-                      defaultValue=""
-                    >
-                      <option value="" disabled>Escolha um tipo</option>
-                      <option value="Outros">Outros</option>
-                      <option value="Patente de Software">Patente de Software</option>
-                      <option value="Registro de Software">Registro de Software</option>
-                      <option value="Startup">Startup</option>
-                      <option value="Artigos e Relatórios Técnicos">Artigos e Relatórios Técnicos</option>
-                      <option value="Plataforma Online">Plataforma Online</option>
-                      <option value="TCC">TCC</option>
-                      <option value="Dissertação e Tese">Dissertação e Tese</option>
-                    </select>
+                      onChange={(e) => handleChangeArticle('tema', e.target.value)}
+                    />
                   </div>
                   <div>
-                                        <h3 className="text-lg font-semibold">Descrição <span className="text-red-500">*</span></h3>
-                    <input type="text" name="descricao" id="descricao" placeholder="descrição" className="focus:outline-none border-b-2 w-[15vw]" onChange={(e) => handleChangeProduto('descricao', e.target.value)}/>
+                    <h3 className="text-lg font-semibold">Palavras-chave <span className="text-red-500">*</span></h3>
+                    <input
+                      type="text"
+                      name="palavras"
+                      id="palavras"
+                      placeholder="Ex: Palavra1,Palavra2"
+                      className="focus:outline-none border-b-2 w-[15vw]"
+                      onChange={(e) => handleChangeArticle('palavras_chave', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">Descrição <span className="text-red-500">*</span></h3>
+                    <input
+                      type="text"
+                      name="descricao"
+                      id="descricao"
+                      placeholder="Descrição"
+                      className="focus:outline-none border-b-2 w-[15vw]"
+                      onChange={(e) => handleChangeArticle('descricao', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">Resumo <span className="text-red-500">*</span></h3>
+                    <input
+                      type="text"
+                      name="resumo"
+                      id="resumo"
+                      placeholder="Resumo"
+                      className="focus:outline-none border-b-2 w-[15vw]"
+                      onChange={(e) => handleChangeArticle('resumo', e.target.value)}
+                    />
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold">Semestre <span className="text-red-500">*</span></h3>
                     <select
                       name="semestre"
                       id="semestre"
-                      value={NewProduto.semestre}
+                      value={NewArticle.data}
                       className="focus:outline-none border-b-2 w-[15vw]"
-                      onChange={(e) => handleChangeProduto( 'semestre', e.target.value )}>
+                      onChange={(e) => handleChangeArticle('data', e.target.value)}>
                       <option value="">Selecione um semestre</option>
                       {semesterGenerator().map((semestre) => (
                           <option key={semestre} value={semestre}>{semestre}</option>))}
@@ -384,13 +430,20 @@ function Userprodutos () {
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {file ? <span>{file.name}</span> : <span>Subir PDF</span>}
+                      {file ? <span>{file.name}</span> : <span>Subir PDF <span className="text-red-500">*</span></span>}
                       <FaFileUpload className="ml-2" />
                     </label>
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold">Equipe <span className="text-red-500">*</span></h3>
-                    <input type="text" name="equipe" id="equipe" placeholder="Pessoa1,Pessoa2,Pessoa3" className="focus:outline-none border-b-2 w-[15vw]" onChange={(e) => handleChangeProduto('equipe', e.target.value)}/>
+                    <input
+                      type="text"
+                      name="equipe"
+                      id="equipe"
+                      placeholder="Pessoa1,Pessoa2,Pessoa3"
+                      className="focus:outline-none border-b-2 w-[15vw]"
+                      onChange={(e) => handleChangeArticle('equipe', e.target.value)}
+                    />
                   </div>
                 </div>
               </form>
@@ -398,9 +451,9 @@ function Userprodutos () {
                 <button
                   type="button"
                   className={`inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm sm:ml-3 sm:w-auto ${
-                    changedTitle && formValid 
-                      ? "bg-primary-color hover:bg-blue-700" 
-                      : "bg-gray-400 cursor-not-allowed"
+                  formValid && changedTitle
+                    ? "bg-primary-color hover:bg-blue-700" 
+                    : "bg-gray-400 cursor-not-allowed"
                   }`}
                   onClick={handlePost}
                   disabled={!formValid || !changedTitle}
@@ -425,4 +478,4 @@ function Userprodutos () {
   )
 }
 
-export default Userprodutos
+export default Userarticles
